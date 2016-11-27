@@ -22,7 +22,7 @@ class FaultFinder(object):
 				for resource in location['resources']:
 					resource_identifier = site['name'], location['name'], resource['name']
 					if self._should_track_resource(resource):
-						self._potential_faults[resource_identifier] += 1
+						self._potential_faults[resource_identifier] = 1
 					else:
 						self._potential_faults[resource_identifier] = 0
 
