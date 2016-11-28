@@ -1,12 +1,11 @@
-import time
 import logging
+import time
 from datetime import datetime
 
 import click
 
-from bookit.faultfinder import FaultFinder
+from studentit.bookit.faultfinder import FaultFinder
 from .db import DatabaseManager
-
 
 SECS_IN_DAY = 86400
 

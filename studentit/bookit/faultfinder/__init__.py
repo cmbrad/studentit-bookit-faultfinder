@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from bookit.api_client import ApiClient
+from studentit.bookit.api import ApiClient
 
 
 class FaultFinder(object):
@@ -37,4 +37,3 @@ class FaultFinder(object):
 		not_game = 'game' not in name_lower
 
 		return is_off and not_room and not_booth and not_game
-
