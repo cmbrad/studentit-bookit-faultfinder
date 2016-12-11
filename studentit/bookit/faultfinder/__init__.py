@@ -8,9 +8,9 @@ class FaultFinder(object):
 		self.site_id = site_id
 		self.client = ApiClient(username, password)
 
-		self._potential_faults = defaultdict(int)
-
 	def scan(self):
+		resources = defaultdict(bool)
+
 		all_status = self.client.admin_all_resource_status()
 		for site in all_status:
 			# Don't track default site - not in use by students
@@ -21,14 +21,11 @@ class FaultFinder(object):
 			for location in site['locations']:
 				for resource in location['resources']:
 					resource_identifier = site['name'], location['name'], resource['name']
-					if self._should_track_resource(resource):
-						self._potential_faults[resource_identifier] = 1
-					else:
-						self._potential_faults[resource_identifier] = 0
+					resources[resource_identifier] = self._resource_might_be_faulty(resource)
 
-		return self._potential_faults
+		return resources
 
-	def _should_track_resource(self, resource):
+	def _resource_might_be_faulty(self, resource):
 		name_lower = resource['name'].lower()
 		is_off = resource['admin_status'] == 'Switched Off or No Communication'
 

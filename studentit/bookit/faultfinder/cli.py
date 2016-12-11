@@ -6,6 +6,8 @@ import click
 
 from studentit.bookit.faultfinder import FaultFinder
 from .db import DatabaseManager
+from .email import send_fault_email
+
 
 SECS_IN_DAY = 86400
 
@@ -18,30 +20,28 @@ def cli(ctx):
 
 
 @cli.command()
-@click.option('--username', envvar='BOOKIT_USERNAME')
-@click.option('--password', envvar='BOOKIT_PASSWORD')
+@click.option('--username', envvar='BOOKIT_USERNAME', required=True)
+@click.option('--password', envvar='BOOKIT_PASSWORD', required=True)
 @click.option('--interval-secs', default=300)
-@click.option('--fault-limit', default=2)
 @click.pass_obj
-def find(obj, username, password, interval_secs, fault_limit):
+def find(obj, username, password, interval_secs):
 	logger = obj['LOGGER']
 	db_manager = DatabaseManager('faults.db')
 	fault_finder = FaultFinder(username, password)
 
 	while True:
 		logger.info('Scanning for faults...')
-		potential_faults = fault_finder.scan()
+		try:
+			resources = fault_finder.scan()
 
-		for resource, fault_count in potential_faults.items():
-			site_name, location_name, resource_name = resource
-			db_count = db_manager.select_fault_count(site_name, location_name, resource_name)
+			for resource, might_be_faulty in resources.items():
+				site_name, location_name, resource_name = resource
+				db_manager.update_fault(site_name, location_name, resource_name, might_be_faulty)
+			logger.info('Finished scan. Waiting {interval} seconds to scan again.'.format(interval=interval_secs))
+		except Exception as e:
+			logger.info('Error during scan, cancelling. Waiting {interval} seconds to scan again.'.format(interval=interval_secs))
+			logger.exception(e)
 
-			total_count = (db_count + fault_count) if fault_count == 1 else 0
-			#print('Before', resource_name, db_manager.select_fault_count(site_name, location_name, resource_name))
-			db_manager.update_fault(site_name, location_name, resource_name, total_count)
-			#print('After', resource_name, db_manager.select_fault_count(site_name, location_name, resource_name))
-
-		logger.info('Finished scan. Waiting {interval} seconds to scan again.'.format(interval=interval_secs))
 		time.sleep(interval_secs)
 
 
@@ -54,13 +54,31 @@ def list(obj, limit_secs):
 	faulty = db_manager.select_faulty()
 
 	for resource in faulty:
-		resource_name, site_name, location_name = resource[0], resource[1], resource[2]
-		fault_count = resource[3]
-		fault_begin = resource[4]
 		age = datetime.now() - resource[4]
-
 		if age.total_seconds() >= limit_secs:
 			logger.info('{} {}'.format(resource, age))
+
+
+@cli.command()
+@click.option('--username', envvar='BOOKIT_USERNAME', required=True)
+@click.option('--password', envvar='BOOKIT_PASSWORD', required=True)
+@click.option('--limit-secs', default=SECS_IN_DAY*2.5, type=int)
+@click.option('--to-email', required=True)
+@click.pass_obj
+def email(obj, username, password, limit_secs, to_email):
+	logger = obj['LOGGER']
+	db_manager = DatabaseManager('faults.db')
+	faulty = db_manager.select_faulty()
+
+	resources_to_email = []
+	for resource in faulty:
+		site_name, location_name, resource_name, start_time = resource
+		age = datetime.now() - start_time
+
+		if age.total_seconds() >= limit_secs:
+			resources_to_email.append((site_name, location_name, resource_name, start_time, age))
+	resources_to_email.sort(key=lambda x: (x[0], x[1], x[2]))
+	send_fault_email(username, password, resources_to_email, to_email)
 
 
 def configure_logging():
